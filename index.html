@@ -2,609 +2,1312 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>夜の東京タワー周辺 3D・360度ビュー</title>
+    <title>東京タワー周辺リアル夜景 3D・360度（芝公園・増上寺・大門・麻布台）</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #03050a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #04070f; font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; }
         canvas { display: block; }
         #ui {
-            position: absolute; top: 20px; left: 20px; color: #fff;
-            background: rgba(10, 15, 30, 0.75); padding: 15px 20px; border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            backdrop-filter: blur(8px);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            position: absolute; top: 16px; left: 16px; color: #fff; z-index: 10;
+            background: rgba(8, 12, 24, 0.84); padding: 14px 18px; border-radius: 12px;
+            border: 1px solid rgba(255, 140, 60, 0.35);
+            box-shadow: 0 6px 24px rgba(0,0,0,0.7);
+            max-width: 430px;
         }
-        h1 { margin: 0 0 8px 0; font-size: 18px; color: #ff6622; letter-spacing: 1px; }
-        p { margin: 4px 0; font-size: 13px; color: #ccc; }
-        .controls { margin-top: 12px; display: flex; gap: 10px; }
+        h1 { margin: 0 0 4px 0; font-size: 16px; color: #ff7733; letter-spacing: 0.5px; }
+        p { margin: 3px 0; font-size: 12px; color: #ccc; }
+        .btn-row { margin-top: 9px; display: flex; gap: 6px; flex-wrap: wrap; }
         button {
-            padding: 8px 14px; font-size: 13px; cursor: pointer;
-            background: #ff5500; color: white; border: none; border-radius: 5px;
-            font-weight: bold; transition: 0.2s;
+            padding: 6px 11px; font-size: 12px; cursor: pointer;
+            background: #23304a; color: #eee; border: 1px solid #44587a; border-radius: 5px;
+            font-weight: bold; transition: 0.18s;
         }
-        button:hover { background: #ff7733; }
-        button.recording { background: #dd0000; animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+        button:hover { background: #354970; color: #fff; }
+        button.primary { background: #e64d00; border-color: #ff7733; color: #fff; }
+        button.primary:hover { background: #ff661a; }
+        button.recording { background: #cc0000 !important; border-color: #ff4444 !important; }
+        #status { margin-top: 7px; font-size: 11px; color: #88bbff; }
     </style>
-    <!-- Three.js と拡張機能をCDNから読み込み -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
-    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
     <div id="ui">
-        <h1>TOKYO TOWER 360° NIGHT VIEW</h1>
-        <p>🖱️ 左ドラッグ: 視点回転 / 右ドラッグ: 移動 / ホイール: ズーム</p>
-        <div class="controls">
-            <button id="toggleRotBtn">自動回転: ON</button>
-            <button id="recordBtn">🎥 360度動画を録画 (約15秒)</button>
+        <h1>🗼 東京タワー・芝公園・増上寺・大門 3D夜景</h1>
+        <p>🖱️ 左ドラッグ: 回転 / 右ドラッグ: 移動 / ホイール: ズーム</p>
+        <div class="btn-row">
+            <button id="viewOrbit" class="primary">🌏 360度周回</button>
+            <button id="viewZojoji">⛩️ 増上寺・大門視点</button>
+            <button id="viewAkabane">🛣️ 赤羽橋・桜田通り視点</button>
+            <button id="viewShiba">🌲 芝公園・プリンス視点</button>
         </div>
+        <div class="btn-row">
+            <button id="toggleRotBtn">自動回転: ON</button>
+            <button id="toggleLabelBtn">名所ラベル: ON</button>
+            <button id="recordBtn" class="primary">🎥 360度動画を録画 (18秒)</button>
+        </div>
+        <div id="status">港区の地形・建物を構築中...</div>
     </div>
 
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    <script>
+        window.addEventListener('load', function() {
+            const statusEl = document.getElementById('status');
+            if (typeof THREE === 'undefined') {
+                statusEl.textContent = 'Three.jsの読み込みに失敗しました。ネット接続をご確認ください。';
+                return;
+            }
 
-        // --- 1. シーン・カメラ・レンダラーの初期設定 ---
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x040711);
-        scene.fog = new THREE.FogExp2(0x040711, 0.0018);
+            try {
+                // =========================================================
+                // 1. シーン・カメラ・レンダラー設定
+                // 方角定義: 北 = -Z, 南 = +Z, 東(増上寺・大門) = +X, 西(麻布台) = -X
+                // =========================================================
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x050914);
+                scene.fog = new THREE.FogExp2(0x060b18, 0.00105);
 
-        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
-        camera.position.set(180, 110, 180);
+                const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 1, 2500);
+                const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                document.body.appendChild(renderer.domElement);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.1;
-        document.body.appendChild(renderer.domElement);
+                // スムーズ補間つきカメラコントローラー
+                const cam = {
+                    target: new THREE.Vector3(10, 42, 0),
+                    goalTarget: new THREE.Vector3(10, 42, 0),
+                    radius: 265, goalRadius: 265,
+                    theta: 0.45, goalTheta: 0.45,
+                    phi: 1.18,   goalPhi: 1.18,
+                    autoRotate: true,
+                    rotSpeed: 0.0032,
+                    dragging: false, mode: 0, px: 0, py: 0,
+                    update: function() {
+                        if (this.autoRotate && !this.dragging) {
+                            this.goalTheta += this.rotSpeed;
+                        }
+                        this.theta += (this.goalTheta - this.theta) * 0.08;
+                        this.phi   += (this.goalPhi - this.phi) * 0.08;
+                        this.radius += (this.goalRadius - this.radius) * 0.08;
+                        this.target.lerp(this.goalTarget, 0.08);
 
-        // --- 2. ポストプロセス（夜景の光のにじみ・ブルーム効果） ---
-        const renderScene = new RenderPass(scene, camera);
-        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-        bloomPass.threshold = 0.25;
-        bloomPass.strength = 1.0; // 光の強さ
-        bloomPass.radius = 0.6;
+                        const sp = Math.sin(this.phi);
+                        camera.position.set(
+                            this.target.x + this.radius * sp * Math.cos(this.theta),
+                            this.target.y + this.radius * Math.cos(this.phi),
+                            this.target.z + this.radius * sp * Math.sin(this.theta)
+                        );
+                        camera.lookAt(this.target);
+                    }
+                };
 
-        const composer = new EffectComposer(renderer);
-        composer.addPass(renderScene);
-        composer.addPass(bloomPass);
+                const dom = renderer.domElement;
+                dom.addEventListener('contextmenu', e => e.preventDefault());
+                dom.addEventListener('mousedown', e => {
+                    cam.dragging = true; cam.mode = e.button; cam.px = e.clientX; cam.py = e.clientY;
+                });
+                window.addEventListener('mouseup', () => { cam.dragging = false; });
+                window.addEventListener('mousemove', e => {
+                    if (!cam.dragging) return;
+                    const dx = e.clientX - cam.px, dy = e.clientY - cam.py;
+                    cam.px = e.clientX; cam.py = e.clientY;
+                    if (cam.mode === 0) {
+                        cam.goalTheta += dx * 0.0065;
+                        cam.goalPhi = Math.max(0.15, Math.min(Math.PI / 2 - 0.025, cam.goalPhi - dy * 0.0065));
+                    } else {
+                        const right = new THREE.Vector3(-Math.sin(cam.theta), 0, Math.cos(cam.theta));
+                        const forward = new THREE.Vector3(-Math.cos(cam.theta), 0, -Math.sin(cam.theta));
+                        cam.goalTarget.addScaledVector(right, -dx * 0.3);
+                        cam.goalTarget.addScaledVector(forward, dy * 0.3);
+                    }
+                });
+                dom.addEventListener('wheel', e => {
+                    e.preventDefault();
+                    cam.goalRadius = Math.max(35, Math.min(620, cam.goalRadius + e.deltaY * 0.18));
+                }, { passive: false });
 
-        // --- 3. カメラコントロール（360度回転） ---
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 55, 0); // 東京タワーの中心あたりを注視
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.autoRotate = true;
-        controls.autoRotateSpeed = 1.6; // 自動回転の速度
-        controls.maxPolarAngle = Math.PI / 2 - 0.02; // 地面より下に潜らないように制限
+                // =========================================================
+                // 2. ライティング（森の陰影・寺院の荘厳さ・タワーの暖色光）
+                // =========================================================
+                scene.add(new THREE.HemisphereLight(0x3a5588, 0x101820, 1.25));
 
-        // --- 4. ライティング（建物のディテールを見せるための照明） ---
-        const ambientLight = new THREE.AmbientLight(0x223355, 1.8); // 夜空の環境光（建物の輪郭を見せる）
-        scene.add(ambientLight);
+                const moonLight = new THREE.DirectionalLight(0x7799cc, 0.9);
+                moonLight.position.set(180, 320, -140);
+                scene.add(moonLight);
 
-        const dirLight = new THREE.DirectionalLight(0x5577aa, 1.5); // 月明かりのような指向性ライト
-        dirLight.position.set(150, 300, 100);
-        scene.add(dirLight);
+                // 東京タワーからのランドマークライト照り返し
+                const towerWarmLight = new THREE.PointLight(0xff6611, 2.6, 260);
+                towerWarmLight.position.set(0, 68, 0);
+                scene.add(towerWarmLight);
 
-        const towerGlow = new THREE.PointLight(0xff5500, 5, 250); // 東京タワーからの照り返し
-        towerGlow.position.set(0, 60, 0);
-        scene.add(towerGlow);
+                // 増上寺のライトアップ照明
+                const templeLight = new THREE.PointLight(0xffbb66, 1.6, 110);
+                templeLight.position.set(112, 22, 0);
+                scene.add(templeLight);
 
-        // --- 5. プロシージャルテクスチャ生成（コードだけで窓や鉄骨を描く） ---
-        
-        // ビルの窓と外壁のディテールテクスチャ
-        function createBuildingTexture(seed) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 512;
-            const ctx = canvas.getContext('2d');
+                // =========================================================
+                // 3. プロシージャル・テクスチャ群
+                // =========================================================
+                function makeGlowTex(innerCol, midCol) {
+                    const c = document.createElement('canvas');
+                    c.width = 128; c.height = 128;
+                    const ctx = c.getContext('2d');
+                    const g = ctx.createRadialGradient(64, 64, 2, 64, 64, 64);
+                    g.addColorStop(0, innerCol);
+                    g.addColorStop(0.35, midCol);
+                    g.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = g;
+                    ctx.fillRect(0, 0, 128, 128);
+                    return new THREE.CanvasTexture(c);
+                }
+                const orangeGlowTex = makeGlowTex('rgba(255,160,70,0.85)', 'rgba(255,90,20,0.28)');
+                const warmGlowTex   = makeGlowTex('rgba(255,220,150,0.8)', 'rgba(255,160,60,0.22)');
 
-            // 外壁ベースカラー（コンクリートの質感・パネルの目地）
-            const wallColors = ['#151a24', '#1e2430', '#12151c', '#22262e'];
-            ctx.fillStyle = wallColors[seed % wallColors.length];
-            ctx.fillRect(0, 0, 256, 512);
+                // 用途別ビル外観テクスチャ（オフィス・ホテル・麻布台ガラス・大門雑居ビル）
+                function createArchTexture(type, seed) {
+                    const c = document.createElement('canvas');
+                    c.width = 256; c.height = 512;
+                    const ctx = c.getContext('2d');
 
-            // 外壁の縦ピラー・横フレームを描画（建物の構造ディテール）
-            ctx.fillStyle = '#0c0f14';
-            for (let y = 0; y < 512; y += 16) ctx.fillRect(0, y, 256, 3);
-            for (let x = 0; x < 256; x += 32) ctx.fillRect(x, 0, 4, 512);
+                    if (type === 'azabudai') {
+                        // 麻布台ヒルズ風：シャンパンゴールドのガラスカーテンウォール＋曲線マリオン
+                        ctx.fillStyle = '#1d2432';
+                        ctx.fillRect(0, 0, 256, 512);
+                        for (let r = 0; r < 40; r++) {
+                            const lit = 0.45 + 0.35 * Math.sin(r * 0.7 + seed);
+                            for (let col = 0; col < 10; col++) {
+                                if (Math.random() < lit) {
+                                    ctx.fillStyle = (Math.random() < 0.7) ? '#ffdfaa' : '#fff3d6';
+                                } else {
+                                    ctx.fillStyle = '#141c2b';
+                                }
+                                ctx.fillRect(col * 25 + 3, r * 12 + 2, 20, 9);
+                            }
+                            ctx.fillStyle = '#5c4a32';
+                            ctx.fillRect(0, r * 12, 256, 2);
+                        }
+                        ctx.fillStyle = '#6e583b';
+                        for (let x = 0; x < 256; x += 25) ctx.fillRect(x, 0, 3, 512);
 
-            // 窓の明かりを描画（オフィス光、暖色光、消灯）
-            const cols = 8;
-            const rows = 32;
-            const padX = 6, padY = 4;
-            const winW = (256 / cols) - padX * 1.5;
-            const winH = (512 / rows) - padY * 1.5;
-
-            for (let r = 1; r < rows - 1; r++) {
-                // フロアごとの点灯率を変える（リアルさ向上）
-                const floorLitProb = (Math.sin(r * seed) * 0.5 + 0.5) * 0.75;
-                for (let c = 0; c < cols; c++) {
-                    const wx = c * (256 / cols) + padX;
-                    const wy = r * (512 / rows) + padY;
-
-                    if (Math.random() < floorLitProb) {
-                        const randColor = Math.random();
-                        if (randColor < 0.55) ctx.fillStyle = '#cceeff';      // クールな蛍光灯・LED
-                        else if (randColor < 0.85) ctx.fillStyle = '#ffe4aa'; // 暖色系オフィス・ホテル
-                        else if (randColor < 0.95) ctx.fillStyle = '#88bbff'; // 青白いモニター光
-                        else ctx.fillStyle = '#ffaa66';                       // オレンジの室内灯
-                        
-                        ctx.fillRect(wx, wy, winW, winH);
-                        
-                        // ブラインドや部屋の仕切りのディテールをランダムに追加
-                        if (Math.random() < 0.4) {
-                            ctx.fillStyle = 'rgba(0,0,0,0.4)';
-                            ctx.fillRect(wx, wy, winW, winH * 0.5);
+                    } else if (type === 'prince_park') {
+                        // ザ・プリンス パークタワー東京風：白いグリッドフレームと温かい客室窓
+                        ctx.fillStyle = '#abb4c2';
+                        ctx.fillRect(0, 0, 256, 512);
+                        for (let r = 0; r < 28; r++) {
+                            for (let col = 0; col < 8; col++) {
+                                const isLit = Math.random() < 0.62;
+                                ctx.fillStyle = isLit ? (Math.random() < 0.8 ? '#ffe0a3' : '#fff5dd') : '#1c2536';
+                                ctx.fillRect(col * 32 + 5, r * 18 + 4, 22, 11);
+                            }
+                        }
+                    } else if (type === 'tokyo_prince') {
+                        // 東京プリンスホテル風：横長の白いバルコニーラインと暖色客室
+                        ctx.fillStyle = '#252c38';
+                        ctx.fillRect(0, 0, 256, 512);
+                        for (let r = 0; r < 16; r++) {
+                            for (let col = 0; col < 10; col++) {
+                                ctx.fillStyle = (Math.random() < 0.68) ? '#ffd588' : '#161c26';
+                                ctx.fillRect(col * 25 + 3, r * 32 + 6, 20, 14);
+                            }
+                            // 白い水平バルコニー手すり
+                            ctx.fillStyle = '#cdd3de';
+                            ctx.fillRect(0, r * 32 + 20, 256, 7);
+                        }
+                    } else if (type === 'daimon') {
+                        // 大門・浜松町の商業・飲食店雑居ビル（1〜2階が明るい店舗、上階オフィス）
+                        ctx.fillStyle = (seed % 2 === 0) ? '#2b2d36' : '#332d2b';
+                        ctx.fillRect(0, 0, 256, 512);
+                        for (let r = 0; r < 16; r++) {
+                            const isShopFloor = (r >= 13);
+                            for (let col = 0; col < 6; col++) {
+                                if (isShopFloor) {
+                                    ctx.fillStyle = (col % 2 === 0) ? '#ffdd99' : '#ffcc66';
+                                    ctx.fillRect(col * 42 + 4, r * 32 + 4, 34, 24);
+                                } else {
+                                    ctx.fillStyle = (Math.random() < 0.5) ? '#d8f0ff' : (Math.random() < 0.4 ? '#ffe0a0' : '#141923');
+                                    ctx.fillRect(col * 42 + 6, r * 32 + 8, 30, 16);
+                                }
+                            }
+                            ctx.fillStyle = '#191c24';
+                            ctx.fillRect(0, r * 32, 256, 4);
                         }
                     } else {
-                        // 消灯している窓（夜空の反射）
-                        ctx.fillStyle = '#090d16';
-                        ctx.fillRect(wx, wy, winW, winH);
+                        // 一般オフィス・マンション（浜松町・虎ノ門・芝エリア）
+                        const walls = ['#202836', '#28303d', '#1c2330', '#2d333d'];
+                        ctx.fillStyle = walls[seed % walls.length];
+                        ctx.fillRect(0, 0, 256, 512);
+                        for (let r = 0; r < 32; r++) {
+                            const rowProb = 0.25 + 0.55 * Math.abs(Math.sin(r * 1.3 + seed));
+                            for (let col = 0; col < 8; col++) {
+                                if (Math.random() < rowProb) {
+                                    const rnd = Math.random();
+                                    ctx.fillStyle = rnd < 0.58 ? '#cceeff' : (rnd < 0.88 ? '#ffe4aa' : '#99ccff');
+                                } else {
+                                    ctx.fillStyle = '#101622';
+                                }
+                                ctx.fillRect(col * 32 + 5, r * 16 + 4, 22, 9);
+                            }
+                            ctx.fillStyle = '#131822';
+                            ctx.fillRect(0, r * 16, 256, 3);
+                        }
+                    }
+
+                    const t = new THREE.CanvasTexture(c);
+                    t.wrapS = THREE.RepeatWrapping;
+                    t.wrapT = THREE.RepeatWrapping;
+                    return t;
+                }
+
+                // 東京タワーのトラス面テクスチャ（最下段はアーチ開口付き！）
+                function createTowerPanelTexture(colorHex, hasArch) {
+                    const c = document.createElement('canvas');
+                    c.width = 256; c.height = 256;
+                    const ctx = c.getContext('2d');
+                    ctx.clearRect(0, 0, 256, 256);
+
+                    ctx.strokeStyle = colorHex;
+                    ctx.lineWidth = 12;
+
+                    // 左右の主柱と上下フレーム
+                    ctx.strokeRect(6, 6, 244, 244);
+
+                    if (hasArch) {
+                        // 東京タワー特有の足元の大きな放物線アーチ開口
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0); ctx.lineTo(256, 85);
+                        ctx.moveTo(256, 0); ctx.lineTo(0, 85);
+                        ctx.moveTo(0, 85); ctx.lineTo(256, 85);
+                        // 左右の脚内部トラス
+                        ctx.moveTo(0, 85); ctx.lineTo(75, 256);
+                        ctx.moveTo(256, 85); ctx.lineTo(181, 256);
+                        ctx.moveTo(0, 170); ctx.lineTo(55, 170);
+                        ctx.moveTo(201, 170); ctx.lineTo(256, 170);
+                        ctx.stroke();
+
+                        // アーチ曲線
+                        ctx.lineWidth = 14;
+                        ctx.beginPath();
+                        ctx.moveTo(52, 256);
+                        ctx.quadraticCurveTo(128, 82, 204, 256);
+                        ctx.stroke();
+
+                        // アーチ下を透明にくり抜く
+                        ctx.globalCompositeOperation = 'destination-out';
+                        ctx.beginPath();
+                        ctx.moveTo(58, 256);
+                        ctx.quadraticCurveTo(128, 94, 198, 256);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.globalCompositeOperation = 'source-over';
+                    } else {
+                        // Kブレース・Xブレース構造
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0); ctx.lineTo(256, 128);
+                        ctx.moveTo(256, 0); ctx.lineTo(0, 128);
+                        ctx.moveTo(0, 128); ctx.lineTo(256, 128);
+                        ctx.moveTo(0, 128); ctx.lineTo(256, 256);
+                        ctx.moveTo(256, 128); ctx.lineTo(0, 256);
+                        ctx.stroke();
+
+                        ctx.lineWidth = 6;
+                        ctx.beginPath();
+                        ctx.moveTo(0, 64); ctx.lineTo(256, 64);
+                        ctx.moveTo(0, 192); ctx.lineTo(256, 192);
+                        ctx.moveTo(128, 0); ctx.lineTo(128, 256);
+                        ctx.stroke();
+                    }
+                    return new THREE.CanvasTexture(c);
+                }
+
+                // 地面マップ（芝公園の緑地・増上寺境内・日比谷通り・桜田通り・大門通りを描き分け）
+                function createMinatoGroundTexture() {
+                    const c = document.createElement('canvas');
+                    c.width = 2048; c.height = 2048;
+                    const ctx = c.getContext('2d');
+                    // ワールド座標 -500〜+500 を 0〜2048 にマッピング
+                    const toPx = v => (v + 500) / 1000 * 2048;
+
+                    // 1. 都市市街地ベース（アスファルト＆街区）
+                    ctx.fillStyle = '#0d121c';
+                    ctx.fillRect(0, 0, 2048, 2048);
+
+                    // 市街地の細かい路地グリッド（大門・浜松町・虎ノ門・麻布エリア）
+                    ctx.strokeStyle = '#161e2e';
+                    ctx.lineWidth = 6;
+                    for (let v = -480; v <= 480; v += 45) {
+                        ctx.beginPath(); ctx.moveTo(toPx(v), 0); ctx.lineTo(toPx(v), 2048); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(0, toPx(v)); ctx.lineTo(2048, toPx(v)); ctx.stroke();
+                    }
+
+                    // 2. 芝公園・紅葉谷の緑地エリア（道路グリッドを上書きして自然な公園地形にする）
+                    ctx.fillStyle = '#0b1c14';
+                    ctx.beginPath();
+                    ctx.ellipse(toPx(45), toPx(30), 390, 440, 0.1, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // 芝公園4号地・プリンスパークタワー前の円形芝生広場＆遊歩道
+                    ctx.fillStyle = '#11291b';
+                    ctx.beginPath();
+                    ctx.arc(toPx(112), toPx(88), 95, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#3b3528';
+                    ctx.lineWidth = 7;
+                    ctx.stroke();
+
+                    // 3. 増上寺の境内（玉砂利と石畳参道）
+                    ctx.fillStyle = '#1b1d22';
+                    ctx.fillRect(toPx(65), toPx(-48), toPx(158) - toPx(65), toPx(48) - toPx(-48));
+                    // 本堂への白い石畳
+                    ctx.fillStyle = '#3a3d45';
+                    ctx.fillRect(toPx(95), toPx(-7), toPx(160) - toPx(95), 28);
+
+                    // 4. 主要幹線道路の描画
+                    function drawRoad(x1, z1, x2, z2, widthPx, centerCol) {
+                        ctx.strokeStyle = '#283142';
+                        ctx.lineWidth = widthPx + 8;
+                        ctx.beginPath(); ctx.moveTo(toPx(x1), toPx(z1)); ctx.lineTo(toPx(x2), toPx(z2)); ctx.stroke();
+
+                        ctx.strokeStyle = '#0c1018';
+                        ctx.lineWidth = widthPx;
+                        ctx.beginPath(); ctx.moveTo(toPx(x1), toPx(z1)); ctx.lineTo(toPx(x2), toPx(z2)); ctx.stroke();
+
+                        ctx.strokeStyle = centerCol || '#556680';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([12, 12]);
+                        ctx.beginPath(); ctx.moveTo(toPx(x1), toPx(z1)); ctx.lineTo(toPx(x2), toPx(z2)); ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+
+                    // 日比谷通り（増上寺・三解脱門の正面を南北に縦断 X = 162）
+                    drawRoad(162, -480, 162, 480, 34, '#ffaa44');
+                    // 大門通り（三解脱門前から大門をくぐり浜松町駅方面へ東へ伸びる Z = 0, X = 162..480）
+                    drawRoad(162, 0, 480, 0, 32, '#ffaa44');
+                    // 国道1号・桜田通り（赤羽橋交差点から東京タワー西側をかすめて虎ノ門・神谷町へ北西に抜ける名道！）
+                    drawRoad(-25, 175, -155, -450, 36, '#ff8822');
+                    drawRoad(-25, 175, -35, 480, 34, '#ff8822');
+                    // 環状三号線・麻布通り / 赤羽橋から東（芝公園南側）へ抜ける通り
+                    drawRoad(-25, 175, 480, 175, 32);
+                    drawRoad(-25, 175, -450, 80, 30);
+                    // 第一京浜（国道15号・大門交差点 X = 275 を南北に走る大通り）
+                    drawRoad(275, -480, 275, 480, 38, '#ffaa44');
+                    // 御成門通り（東京プリンスホテル北側 Z = -125）
+                    drawRoad(-120, -125, 480, -125, 26);
+
+                    // 東京湾・日の出ふ頭方面（南東端の水面）
+                    ctx.fillStyle = '#040914';
+                    ctx.fillRect(toPx(395), toPx(-480), 300, 2048);
+
+                    return new THREE.CanvasTexture(c);
+                }
+
+                const ground = new THREE.Mesh(
+                    new THREE.PlaneGeometry(1000, 1000),
+                    new THREE.MeshLambertMaterial({ map: createMinatoGroundTexture() })
+                );
+                ground.rotation.x = -Math.PI / 2;
+                scene.add(ground);
+
+                // =========================================================
+                // 4. 東京タワー（紅葉谷の高台＋本物の放物線シルエット＋アーチ脚）
+                // =========================================================
+                const blinkingLights = [];
+
+                function buildAuthenticTokyoTower() {
+                    const wrap = new THREE.Group();
+
+                    // タワーが立つ芝公園・紅葉谷の小高い丘
+                    const hill = new THREE.Mesh(
+                        new THREE.CylinderGeometry(34, 56, 6, 24),
+                        new THREE.MeshLambertMaterial({ color: 0x0f2217 })
+                    );
+                    hill.position.y = 3;
+                    wrap.add(hill);
+
+                    const tower = new THREE.Group();
+                    tower.position.y = 6; // 高台の上に設置
+
+                    // フットタウン（足元の商業ビル）
+                    const ftTex = createArchTexture('office', 3);
+                    ftTex.repeat.set(2, 0.35);
+                    const footTown = new THREE.Mesh(
+                        new THREE.BoxGeometry(30, 9.5, 30),
+                        new THREE.MeshLambertMaterial({ map: ftTex, emissive: 0x555555, emissiveMap: ftTex })
+                    );
+                    footTown.position.y = 4.75;
+                    tower.add(footTown);
+
+                    // 放物線カーブ関数: 高さ y (0〜112) に対するタワー半幅 w(y)
+                    function halfWidthAt(y) {
+                        if (y <= 42) {
+                            // 地上〜大展望台：優美に広がる凹カーブ
+                            const t = 1 - (y / 42);
+                            return 8.2 + 13.8 * Math.pow(t, 1.55);
+                        } else {
+                            // 大展望台〜特別展望台〜上部
+                            const t = 1 - ((y - 42) / 70);
+                            return 2.0 + 6.0 * Math.pow(Math.max(0, t), 1.35);
+                        }
+                    }
+
+                    const texOrangeArch = createTowerPanelTexture('#ff4500', true);
+                    const texOrange     = createTowerPanelTexture('#ff4500', false);
+                    const texWhite      = createTowerPanelTexture('#f5f5f5', false);
+
+                    // 4面パネルで放物線の各段を精密構築
+                    const tiers = [
+                        { y0: 0,  y1: 20, tex: texOrangeArch, col: 0xff4500 },
+                        { y0: 20, y1: 39, tex: texOrange,     col: 0xff4500 },
+                        { y0: 47, y1: 60, tex: texWhite,      col: 0xffffff },
+                        { y0: 60, y1: 74, tex: texOrange,     col: 0xff4500 },
+                        { y0: 74, y1: 87, tex: texWhite,      col: 0xffffff },
+                        { y0: 87, y1: 96, tex: texOrange,     col: 0xff4500 },
+                        { y0: 101,y1: 112,tex: texWhite,      col: 0xffffff }
+                    ];
+
+                    tiers.forEach(t => {
+                        const w0 = halfWidthAt(t.y0);
+                        const w1 = halfWidthAt(t.y1);
+                        const h = t.y1 - t.y0;
+                        const mat = new THREE.MeshBasicMaterial({
+                            map: t.tex, transparent: true, alphaTest: 0.12, side: THREE.DoubleSide
+                        });
+
+                        // 台形4面パネルを配置
+                        for (let side = 0; side < 4; side++) {
+                            const geo = new THREE.BufferGeometry();
+                            const verts = new Float32Array([
+                                -w0, t.y0, w0,   w0, t.y0, w0,   w1, t.y1, w1,
+                                -w0, t.y0, w0,   w1, t.y1, w1,  -w1, t.y1, w1
+                            ]);
+                            const uvs = new Float32Array([
+                                0, 0,  1, 0,  1, 1,
+                                0, 0,  1, 1,  0, 1
+                            ]);
+                            geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+                            geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+                            const face = new THREE.Mesh(geo, mat);
+                            face.rotation.y = side * (Math.PI / 2);
+                            tower.add(face);
+                        }
+
+                        // 4隅の立体鉄骨主柱（どの角度から見ても立体感が出る）
+                        const postMat = new THREE.MeshBasicMaterial({ color: t.col });
+                        [[-1,-1],[1,-1],[1,1],[-1,1]].forEach(([sx, sz]) => {
+                            const pStart = new THREE.Vector3(sx * w0, t.y0, sz * w0);
+                            const pEnd   = new THREE.Vector3(sx * w1, t.y1, sz * w1);
+                            const len = pStart.distanceTo(pEnd);
+                            const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.6, len, 6), postMat);
+                            cyl.position.copy(pStart).lerp(pEnd, 0.5);
+                            cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pEnd.clone().sub(pStart).normalize());
+                            tower.add(cyl);
+                        });
+                    });
+
+                    // メインデッキ（大展望台 2層構造）
+                    const deckMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee, emissive: 0x443322 });
+                    const winMat  = new THREE.MeshBasicMaterial({ color: 0xffe8b0 });
+                    const d1 = new THREE.Mesh(new THREE.BoxGeometry(18.5, 3.6, 18.5), deckMat); d1.position.y = 41;
+                    const w1 = new THREE.Mesh(new THREE.BoxGeometry(19.0, 1.7, 19.0), winMat);  w1.position.y = 41;
+                    const d2 = new THREE.Mesh(new THREE.BoxGeometry(16.8, 3.6, 16.8), deckMat); d2.position.y = 45;
+                    const w2 = new THREE.Mesh(new THREE.BoxGeometry(17.3, 1.7, 17.3), winMat);  w2.position.y = 45;
+                    tower.add(d1, w1, d2, w2);
+
+                    // トップデッキ（特別展望台）
+                    const td = new THREE.Mesh(new THREE.CylinderGeometry(4.3, 3.9, 5.2, 8), deckMat); td.position.y = 98.5;
+                    const tw = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.1, 2.2, 8), new THREE.MeshBasicMaterial({ color: 0xffbb55 })); tw.position.y = 98.5;
+                    tower.add(td, tw);
+
+                    // 先端ゲイン塔（紅白交互アンテナ）
+                    const spireParts = [
+                        { y: 118, h: 12, r1: 1.9, r2: 1.2, c: 0xff4500 },
+                        { y: 129, h: 10, r1: 1.2, r2: 0.7, c: 0xffffff },
+                        { y: 138, h: 8,  r1: 0.7, r2: 0.4, c: 0xff4500 },
+                        { y: 145, h: 7,  r1: 0.4, r2: 0.15,c: 0xffffff }
+                    ];
+                    spireParts.forEach(sp => {
+                        const m = new THREE.Mesh(new THREE.CylinderGeometry(sp.r2, sp.r1, sp.h, 8), new THREE.MeshBasicMaterial({ color: sp.c }));
+                        m.position.y = sp.y;
+                        tower.add(m);
+                    });
+
+                    // ランドマークライトの柔らかい光彩スプライト
+                    [26, 58, 92, 125].forEach((gy, i) => {
+                        const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+                            map: orangeGlowTex, blending: THREE.AdditiveBlending, depthWrite: false
+                        }));
+                        const s = 78 - i * 13;
+                        sp.scale.set(s, s, 1);
+                        sp.position.y = gy;
+                        tower.add(sp);
+                    });
+
+                    // 航空障害灯
+                    [47, 101, 134, 149].forEach(ly => {
+                        const b = new THREE.Mesh(new THREE.SphereGeometry(0.95, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff1111 }));
+                        b.position.y = ly;
+                        tower.add(b);
+                        blinkingLights.push(b);
+                    });
+
+                    wrap.add(tower);
+                    return wrap;
+                }
+                scene.add(buildAuthenticTokyoTower());
+
+                // =========================================================
+                // 5. 増上寺（大殿・三解脱門・鐘楼・石灯籠）＆ 大門（朱塗りの門）
+                // =========================================================
+                // 反り（そり）のある日本建築の入母屋屋根を生成する関数
+                function createCurvedJapaneseRoof(w, d, h, roofColor) {
+                    const geo = new THREE.BoxGeometry(w, h, d, 10, 2, 10);
+                    const pos = geo.attributes.position;
+                    for (let i = 0; i < pos.count; i++) {
+                        let vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
+                        const nx = Math.abs(vx) / (w / 2);
+                        const nz = Math.abs(vz) / (d / 2);
+                        if (vy > 0) {
+                            // 大棟に向かって絞り込みつつ、四隅の軒先を優雅に反り上げる
+                            vx *= (1 - 0.55 * (1 - nx * 0.25));
+                            vz *= 0.32 + 0.68 * Math.pow(nx, 1.6);
+                            vy += Math.pow(Math.max(nx, nz), 2.4) * (h * 0.45);
+                        } else {
+                            vy += Math.pow(nx * nz, 1.5) * (h * 0.55);
+                        }
+                        pos.setXYZ(i, vx, vy, vz);
+                    }
+                    geo.computeVertexNormals();
+                    return new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: roofColor }));
+                }
+
+                function buildZojojiAndDaimon() {
+                    const grp = new THREE.Group();
+
+                    // --- 1. 増上寺 大殿（本堂）: 東京タワー真東 (X=96, Z=0) ---
+                    const daiden = new THREE.Group();
+                    daiden.position.set(96, 0, 0);
+
+                    // 石垣基壇と大階段
+                    const stoneBase = new THREE.Mesh(new THREE.BoxGeometry(26, 4.5, 38), new THREE.MeshLambertMaterial({ color: 0x555862 }));
+                    stoneBase.position.y = 2.25;
+                    const stairs = new THREE.Mesh(new THREE.BoxGeometry(8, 3.8, 12), new THREE.MeshLambertMaterial({ color: 0x6a6e7a }));
+                    stairs.position.set(14, 1.9, 0);
+                    daiden.add(stoneBase, stairs);
+
+                    // 本堂の白壁と朱・黒の柱回廊（ライトアップで浮かび上がる）
+                    const hallBody = new THREE.Mesh(
+                        new THREE.BoxGeometry(20, 9.5, 31),
+                        new THREE.MeshLambertMaterial({ color: 0xe8dfd1, emissive: 0x554028 })
+                    );
+                    hallBody.position.y = 9.2;
+                    daiden.add(hallBody);
+
+                    // 二重の大屋根（下層裳階＋上層大屋根）
+                    const lowerRoof = createCurvedJapaneseRoof(27, 39, 3.5, 0x242930);
+                    lowerRoof.position.y = 12.5;
+                    const mainRoof = createCurvedJapaneseRoof(25, 36, 8.5, 0x2a3038);
+                    mainRoof.position.y = 17.5;
+                    // 金色の大棟飾り
+                    const ridge = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 22), new THREE.MeshBasicMaterial({ color: 0xd4af37 }));
+                    ridge.position.y = 22.0;
+                    daiden.add(lowerRoof, mainRoof, ridge);
+                    grp.add(daiden);
+
+                    // 安国殿（本堂北側 X=106, Z=-28）＆ 経蔵・鐘楼（南側）
+                    const ankoku = new THREE.Group();
+                    ankoku.position.set(106, 0, -28);
+                    const akBody = new THREE.Mesh(new THREE.BoxGeometry(13, 6, 15), new THREE.MeshLambertMaterial({ color: 0xddd2c0, emissive: 0x332515 }));
+                    akBody.position.y = 3;
+                    const akRoof = createCurvedJapaneseRoof(17, 19, 4.5, 0x2a3038);
+                    akRoof.position.y = 7.5;
+                    ankoku.add(akBody, akRoof);
+                    grp.add(ankoku);
+
+                    // 参道の石灯籠（温かい灯りが並ぶ）
+                    const lanternPostMat = new THREE.MeshLambertMaterial({ color: 0x666870 });
+                    const lanternLightMat = new THREE.MeshBasicMaterial({ color: 0xffcc66 });
+                    for (let lx = 114; lx <= 142; lx += 7) {
+                        [-6.5, 6.5].forEach(lz => {
+                            const post = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 2.2, 6), lanternPostMat);
+                            post.position.set(lx, 1.1, lz);
+                            const fire = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), lanternLightMat);
+                            fire.position.set(lx, 2.5, lz);
+                            grp.add(post, fire);
+                        });
+                    }
+
+                    // --- 2. 増上寺 三解脱門（国重要文化財・二層の朱塗り山門 X=148, Z=0） ---
+                    const sanmon = new THREE.Group();
+                    sanmon.position.set(148, 0, 0);
+                    const vermilionMat = new THREE.MeshLambertMaterial({ color: 0xc82818, emissive: 0x551108 });
+                    const sLower = new THREE.Mesh(new THREE.BoxGeometry(9, 6.5, 19), vermilionMat);
+                    sLower.position.y = 3.25;
+                    // 3つの門開口（暗い通路穴表現）
+                    [-5, 0, 5].forEach(oz => {
+                        const hole = new THREE.Mesh(new THREE.BoxGeometry(9.3, 4.5, 3.2), new THREE.MeshBasicMaterial({ color: 0x120a08 }));
+                        hole.position.set(0, 2.25, oz);
+                        sanmon.add(hole);
+                    });
+                    const sMidRoof = createCurvedJapaneseRoof(13, 23, 2.5, 0x262b32);
+                    sMidRoof.position.y = 7.0;
+                    const sUpper = new THREE.Mesh(new THREE.BoxGeometry(7.5, 4.5, 16), vermilionMat);
+                    sUpper.position.y = 10.0;
+                    const sTopRoof = createCurvedJapaneseRoof(13.5, 23.5, 4.8, 0x262b32);
+                    sTopRoof.position.y = 13.8;
+                    sanmon.add(sLower, sMidRoof, sUpper, sTopRoof);
+
+                    // 三解脱門ライトアップの暖色グロー
+                    const smGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: warmGlowTex, blending: THREE.AdditiveBlending, depthWrite: false }));
+                    smGlow.scale.set(28, 22, 1);
+                    smGlow.position.set(148, 8, 0);
+                    grp.add(sanmon, smGlow);
+
+                    // --- 3. 大門（大門通りの車道をまたぐ朱塗りの大門 X=225, Z=0） ---
+                    const daimon = new THREE.Group();
+                    daimon.position.set(225, 0, 0);
+                    const dmRed = new THREE.MeshLambertMaterial({ color: 0xd82c1b, emissive: 0x601208 });
+                    // 道路両脇の主柱・控柱
+                    [-9.5, 9.5].forEach(pz => {
+                        const colMain = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 11.5, 10), dmRed);
+                        colMain.position.set(0, 5.75, pz);
+                        const colSub1 = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 9.5, 8), dmRed);
+                        colSub1.position.set(-2.2, 4.75, pz);
+                        const colSub2 = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.6, 9.5, 8), dmRed);
+                        colSub2.position.set(2.2, 4.75, pz);
+                        daimon.add(colMain, colSub1, colSub2);
+                    });
+                    // 冠木・梁（車が下を通れる高さ）
+                    const beam1 = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.6, 22), dmRed);
+                    beam1.position.y = 9.2;
+                    const beam2 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.2, 21), dmRed);
+                    beam2.position.y = 11.2;
+                    const dmRoof = createCurvedJapaneseRoof(8.5, 25, 3.8, 0x262b33);
+                    dmRoof.position.y = 13.0;
+                    daimon.add(beam1, beam2, dmRoof);
+                    grp.add(daimon);
+
+                    return grp;
+                }
+                scene.add(buildZojojiAndDaimon());
+
+                // =========================================================
+                // 6. 芝公園の森（InstancedMeshによる1,850本の木々と遊歩道街灯）
+                // =========================================================
+                function buildShibaParkForest() {
+                    const treePositions = [];
+
+                    function addForestZone(cx, cz, rx, rz, count, avoidTower) {
+                        for (let i = 0; i < count; i++) {
+                            const ang = Math.random() * Math.PI * 2;
+                            const rad = Math.sqrt(Math.random());
+                            const tx = cx + Math.cos(ang) * rx * rad;
+                            const tz = cz + Math.sin(ang) * rz * rad;
+
+                            // 道路・増上寺境内・建物の真上を避ける
+                            if (avoidTower && Math.hypot(tx, tz) < 23) continue; // フットタウン上は除外
+                            if (tx > 68 && tx < 156 && tz > -42 && tz < 42) continue; // 増上寺境内中心は空ける
+                            if (Math.abs(tx - 162) < 12) continue; // 日比谷通り除外
+                            if (Math.hypot(tx - 112, tz - 88) < 28) continue; // 円形芝生広場の中央は芝生として空ける！
+                            if (Math.hypot(tx - 48, tz - 122) < 32) continue; // プリンスパークタワー敷地除外
+                            if (tx > 25 && tx < 115 && tz < -65 && tz > -110) continue; // 東京プリンス敷地除外
+
+                            // 桜田通りからの距離チェック
+                            if (tx < -15 && tz > -150 && Math.abs((tx + 25) - (tz - 175) * 0.21) < 14) continue;
+
+                            const baseH = (Math.hypot(tx, tz) < 55) ? 4.2 : 0; // タワー足元の高台補正
+                            treePositions.push({ x: tx, y: baseH, z: tz, s: 0.75 + Math.random() * 0.85 });
+                        }
+                    }
+
+                    // 紅葉谷・東京タワー周囲の森
+                    addForestZone(5, 5, 78, 82, 580, true);
+                    // 増上寺南側〜芝公園（丸山古墳・プリンスパークタワー周辺）の深い森
+                    addForestZone(75, 98, 85, 68, 650, false);
+                    // 増上寺北側・御成門・東京プリンス周辺の緑地
+                    addForestZone(80, -62, 72, 48, 380, false);
+                    // 日比谷通り・大門通りの街路樹
+                    for (let z = -220; z <= 220; z += 14) {
+                        if (Math.abs(z) > 12) {
+                            treePositions.push({ x: 154, y: 0, z: z, s: 0.65 });
+                            treePositions.push({ x: 170, y: 0, z: z, s: 0.65 });
+                        }
+                    }
+
+                    const canopyGeo = new THREE.DodecahedronGeometry(3.4, 1);
+                    const canopyMat = new THREE.MeshLambertMaterial({ color: 0x163822 });
+                    const instTrees = new THREE.InstancedMesh(canopyGeo, canopyMat, treePositions.length);
+
+                    const dummy = new THREE.Object3D();
+                    const color = new THREE.Color();
+                    treePositions.forEach((p, idx) => {
+                        dummy.position.set(p.x, p.y + 3.2 * p.s, p.z);
+                        dummy.scale.set(p.s * 1.15, p.s * 0.95, p.s * 1.15);
+                        dummy.rotation.y = idx * 1.1;
+                        dummy.updateMatrix();
+                        instTrees.setMatrixAt(idx, dummy.matrix);
+
+                        // タワーに近い木々はオレンジ色の照り返しを少し受ける
+                        const distT = Math.hypot(p.x, p.z);
+                        if (distT < 62) {
+                            color.setRGB(0.18, 0.24, 0.14);
+                        } else {
+                            const g = 0.16 + (idx % 5) * 0.025;
+                            color.setRGB(0.06, g, 0.10);
+                        }
+                        instTrees.setColorAt(idx, color);
+                    });
+                    scene.add(instTrees);
+
+                    // 芝公園の遊歩道フットライト（森の中に浮かぶ温かい散策路の灯り）
+                    const lampGeo = new THREE.SphereGeometry(0.55, 6, 6);
+                    const lampMat = new THREE.MeshBasicMaterial({ color: 0xffdd99 });
+                    for (let a = 0; a < Math.PI * 2; a += 0.35) {
+                        const lx = 112 + Math.cos(a) * 34;
+                        const lz = 88 + Math.sin(a) * 34;
+                        const lamp = new THREE.Mesh(lampGeo, lampMat);
+                        lamp.position.set(lx, 1.4, lz);
+                        scene.add(lamp);
                     }
                 }
-            }
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            return tex;
-        }
+                buildShibaParkForest();
 
-        // 東京タワーの鉄骨トラス（網目）透過テクスチャ
-        function createTrussTexture(colorHex) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 256;
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, 256, 256);
+                // =========================================================
+                // 7. 実在ランドマーク建築 ＆ 大門・浜松町・虎ノ門・麻布の街並み
+                // =========================================================
+                const cityGroup = new THREE.Group();
+                const roofConcrete = new THREE.MeshLambertMaterial({ color: 0x2c3444 });
+                const equipMat     = new THREE.MeshLambertMaterial({ color: 0x525e72 });
 
-            ctx.strokeStyle = colorHex;
-            ctx.lineWidth = 14;
+                // --- A. ザ・プリンス パークタワー東京（南側の森の中にそびえる白い十字翼型ホテル X=48, Z=122） ---
+                function buildPrinceParkTower() {
+                    const g = new THREE.Group();
+                    g.position.set(48, 0, 122);
+                    const tex = createArchTexture('prince_park', 1);
+                    tex.repeat.set(3, 3.5);
+                    const mat = new THREE.MeshLambertMaterial({ map: tex, emissive: 0x777777, emissiveMap: tex });
 
-            // 外枠とX字のブレース（筋交い）
-            ctx.strokeRect(0, 0, 256, 256);
-            ctx.beginPath();
-            ctx.moveTo(0, 0); ctx.lineTo(256, 256);
-            ctx.moveTo(256, 0); ctx.lineTo(0, 256);
-            ctx.moveTo(0, 128); ctx.lineTo(256, 128);
-            ctx.moveTo(128, 0); ctx.lineTo(128, 256);
-            ctx.stroke();
-
-            // 細かいサブトラス
-            ctx.lineWidth = 6;
-            ctx.beginPath();
-            ctx.moveTo(0, 64); ctx.lineTo(256, 64);
-            ctx.moveTo(0, 192); ctx.lineTo(256, 192);
-            ctx.stroke();
-
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            return tex;
-        }
-
-        // 地面・道路グリッドのテクスチャ
-        function createGroundTexture() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 1024;
-            canvas.height = 1024;
-            const ctx = canvas.getContext('2d');
-
-            ctx.fillStyle = '#070a10';
-            ctx.fillRect(0, 0, 1024, 1024);
-
-            // 幹線道路と街路灯・車のヘッドライトの軌跡
-            for (let i = 0; i < 1024; i += 128) {
-                ctx.fillStyle = '#141822';
-                ctx.fillRect(i, 0, 18, 1024);
-                ctx.fillRect(0, i, 1024, 18);
-
-                // オレンジの街灯・車のライト点線
-                ctx.fillStyle = '#ff9933';
-                for (let j = 0; j < 1024; j += 32) {
-                    ctx.fillRect(i + 4, j, 2, 12);
-                    ctx.fillRect(j, i + 4, 12, 2);
+                    const wingMain = new THREE.Mesh(new THREE.BoxGeometry(46, 76, 15), mat);
+                    wingMain.position.y = 38;
+                    const wingCross = new THREE.Mesh(new THREE.BoxGeometry(16, 72, 32), mat);
+                    wingCross.position.y = 36;
+                    // 最上部の明るく輝くクラウンフレーム
+                    const crown = new THREE.Mesh(new THREE.BoxGeometry(47, 3.2, 16), new THREE.MeshBasicMaterial({ color: 0xfff0cc }));
+                    crown.position.y = 75.5;
+                    g.add(wingMain, wingCross, crown);
+                    g.rotation.y = -0.25;
+                    return g;
                 }
-                // 赤いテールランプ
-                ctx.fillStyle = '#ff2222';
-                for (let j = 16; j < 1024; j += 40) {
-                    ctx.fillRect(i + 12, j, 2, 10);
-                    ctx.fillRect(j, i + 12, 10, 2);
+                cityGroup.add(buildPrinceParkTower());
+
+                // --- B. 東京プリンスホテル（増上寺北側の象徴的な横長モダニズムホテル X=72, Z=-88） ---
+                function buildTokyoPrinceHotel() {
+                    const g = new THREE.Group();
+                    g.position.set(72, 0, -88);
+                    const tex = createArchTexture('tokyo_prince', 2);
+                    tex.repeat.set(4, 1.2);
+                    const mat = new THREE.MeshLambertMaterial({ map: tex, emissive: 0x777777, emissiveMap: tex });
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(68, 30, 16), mat);
+                    body.position.y = 15;
+                    const topSign = new THREE.Mesh(new THREE.BoxGeometry(18, 2.2, 1.5), new THREE.MeshBasicMaterial({ color: 0xffeedd }));
+                    topSign.position.set(0, 31.5, 7);
+                    g.add(body, topSign);
+                    return g;
                 }
-            }
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(8, 8);
-            return tex;
-        }
+                cityGroup.add(buildTokyoPrinceHotel());
 
-        // --- 6. 東京タワーの3Dモデル構築 ---
-        const blinkingLights = []; // 点滅する航空障害灯リスト
+                // --- C. 麻布台ヒルズ（北西 X=-155, Z=-85：森JPタワー＋レジデンス2棟＋低層緑化屋根） ---
+                function buildAzabudaiHills() {
+                    const g = new THREE.Group();
+                    const tex = createArchTexture('azabudai', 5);
+                    tex.repeat.set(3, 5);
+                    const mat = new THREE.MeshLambertMaterial({ map: tex, emissive: 0x998866, emissiveMap: tex });
 
-        function buildTokyoTower() {
-            const tower = new THREE.Group();
+                    // 森JPタワー（緩やかなカーブテーパーを持つ大迫力の超高層）
+                    const moriJP = new THREE.Group();
+                    moriJP.position.set(-155, 0, -85);
+                    const segs = [
+                        { y: 28, h: 56, r1: 25, r2: 27 },
+                        { y: 80, h: 48, r1: 22, r2: 25 },
+                        { y: 124,h: 40, r1: 18, r2: 22 }
+                    ];
+                    segs.forEach(s => {
+                        const m = new THREE.Mesh(new THREE.CylinderGeometry(s.r1, s.r2, s.h, 8), mat);
+                        m.position.y = s.y;
+                        m.rotation.y = Math.PI / 8;
+                        moriJP.add(m);
+                    });
+                    // 特徴的な最上部ラティス・クラウン照明
+                    const crown = new THREE.Mesh(
+                        new THREE.CylinderGeometry(13, 18, 12, 8),
+                        new THREE.MeshBasicMaterial({ color: 0xffe2aa, wireframe: false })
+                    );
+                    crown.position.y = 150;
+                    crown.rotation.y = Math.PI / 8;
+                    moriJP.add(crown);
 
-            const orangeTruss = createTrussTexture('#ff3b00');
-            const whiteTruss = createTrussTexture('#ffffff');
+                    const rl = new THREE.Mesh(new THREE.SphereGeometry(0.9, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff1111 }));
+                    rl.position.y = 158;
+                    moriJP.add(rl);
+                    blinkingLights.push(rl);
+                    g.add(moriJP);
 
-            const matOrange = new THREE.MeshStandardMaterial({
-                map: orangeTruss, emissive: 0xff3300, emissiveMap: orangeTruss, emissiveIntensity: 0.9,
-                transparent: true, alphaTest: 0.1, side: THREE.DoubleSide, roughness: 0.3
-            });
-            const matWhite = new THREE.MeshStandardMaterial({
-                map: whiteTruss, emissive: 0xffeedd, emissiveMap: whiteTruss, emissiveIntensity: 0.8,
-                transparent: true, alphaTest: 0.1, side: THREE.DoubleSide, roughness: 0.3
-            });
+                    // 麻布台ヒルズ レジデンスA・B
+                    [[-198, -42, 98], [-118, -138, 108]].forEach(([rx, rz, rh]) => {
+                        const res = new THREE.Mesh(new THREE.BoxGeometry(26, rh, 26), mat);
+                        res.position.set(rx, rh / 2, rz);
+                        const rc = new THREE.Mesh(new THREE.BoxGeometry(26.6, 2.5, 26.6), new THREE.MeshBasicMaterial({ color: 0xffddaa }));
+                        rc.position.set(rx, rh - 1.2, rz);
+                        g.add(res, rc);
+                    });
 
-            // 1. フットタウン（土台のビル）
-            const baseTex = createBuildingTexture(1);
-            baseTex.repeat.set(2, 0.5);
-            const footTown = new THREE.Mesh(
-                new THREE.BoxGeometry(36, 10, 36),
-                new THREE.MeshStandardMaterial({ map: baseTex, emissive: 0xffffff, emissiveMap: baseTex, emissiveIntensity: 0.6 })
-            );
-            footTown.position.y = 5;
-            tower.add(footTown);
-
-            // 2. 4本の脚のアーチ表現（下部トラス）
-            const legGeo = new THREE.CylinderGeometry(11, 20, 35, 4, 1, true);
-            orangeTruss.repeat.set(4, 3);
-            const legs = new THREE.Mesh(legGeo, matOrange);
-            legs.position.y = 22.5;
-            legs.rotation.y = Math.PI / 4;
-            tower.add(legs);
-
-            // 3. メインデッキ（大展望台 2層構造）
-            const mainDeckGroup = new THREE.Group();
-            const deckMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.4 });
-            const windowMat = new THREE.MeshBasicMaterial({ color: 0xffeebb }); // 明るく光る展望窓
-            
-            const deck1 = new THREE.Mesh(new THREE.BoxGeometry(19, 3.5, 19), deckMat);
-            const deckWin1 = new THREE.Mesh(new THREE.BoxGeometry(19.4, 1.8, 19.4), windowMat);
-            const deck2 = new THREE.Mesh(new THREE.BoxGeometry(17, 3.5, 17), deckMat);
-            deck2.position.y = 4;
-            const deckWin2 = new THREE.Mesh(new THREE.BoxGeometry(17.4, 1.8, 17.4), windowMat);
-            deckWin2.position.y = 4;
-
-            mainDeckGroup.add(deck1, deckWin1, deck2, deckWin2);
-            mainDeckGroup.position.y = 41;
-            tower.add(mainDeckGroup);
-
-            // 4. 中央〜上部の紅白（インターナショナルオレンジ＆白）7段シャフト
-            const segments = [
-                { rBot: 10.0, rTop: 7.5, h: 16, y: 51, mat: matWhite },
-                { rBot: 7.5,  rTop: 5.5, h: 16, y: 67, mat: matOrange },
-                { rBot: 5.5,  rTop: 4.2, h: 15, y: 82.5, mat: matWhite },
-                { rBot: 4.2,  rTop: 3.2, h: 15, y: 97.5, mat: matOrange },
-                { rBot: 3.2,  rTop: 2.5, h: 12, y: 111, mat: matWhite }
-            ];
-
-            segments.forEach(s => {
-                const geo = new THREE.CylinderGeometry(s.rTop, s.rBot, s.h, 4, 1, true);
-                const mesh = new THREE.Mesh(geo, s.mat);
-                mesh.position.y = s.y;
-                mesh.rotation.y = Math.PI / 4;
-                tower.add(mesh);
-            });
-
-            // 5. トップデッキ（特別展望台）
-            const topDeck = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 3.8, 4.5, 8), deckMat);
-            topDeck.position.y = 95;
-            const topWin = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.0, 2.0, 8), new THREE.MeshBasicMaterial({ color: 0xffaa44 }));
-            topWin.position.y = 95;
-            tower.add(topDeck, topWin);
-
-            // 6. 先端アンテナ・ゲイン塔
-            const spireOrange = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 2.2, 16, 8), new THREE.MeshBasicMaterial({ color: 0xff4400 }));
-            spireOrange.position.y = 125;
-            const spireWhite = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.8, 16, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-            spireWhite.position.y = 141;
-            tower.add(spireOrange, spireWhite);
-
-            // 航空障害灯（赤く点滅するライト）
-            [45, 97, 130, 149].forEach(h => {
-                const beacon = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.9, 8, 8),
-                    new THREE.MeshBasicMaterial({ color: 0xff0000 })
-                );
-                beacon.position.y = h;
-                tower.add(beacon);
-                blinkingLights.push(beacon);
-            });
-
-            return tower;
-        }
-        scene.add(buildTokyoTower());
-
-        // --- 7. 周辺の建物（詳細ディテール付き）を生成 ---
-        const texPool = [];
-        for (let i = 0; i < 8; i++) texPool.push(createBuildingTexture(i + 10));
-
-        function createDetailedBuilding(x, z, width, depth, height, isLandmark = false) {
-            const bldg = new THREE.Group();
-            bldg.position.set(x, 0, z);
-
-            const tex = texPool[Math.floor(Math.random() * texPool.length)].clone();
-            tex.needsUpdate = true;
-            tex.repeat.set(Math.max(1, Math.round(width / 14)), Math.max(1, Math.round(height / 28)));
-
-            const wallMat = new THREE.MeshStandardMaterial({
-                map: tex,
-                emissive: 0xffffff,
-                emissiveMap: tex,
-                emissiveIntensity: isLandmark ? 0.85 : 0.65,
-                roughness: 0.25,
-                metalness: 0.6
-            });
-
-            const darkConcreteMat = new THREE.MeshStandardMaterial({ color: 0x1e2430, roughness: 0.8 });
-            const metalMat = new THREE.MeshStandardMaterial({ color: 0x3a4250, metalness: 0.7, roughness: 0.4 });
-
-            // 1. 低層階ロビー・エントランス基壇部（詳細感アップ）
-            const podiumH = Math.min(8, height * 0.2);
-            const podium = new THREE.Mesh(new THREE.BoxGeometry(width + 2, podiumH, depth + 2), darkConcreteMat);
-            podium.position.y = podiumH / 2;
-            bldg.add(podium);
-
-            // エントランスの明るいガラス張り
-            const lobbyGlass = new THREE.Mesh(
-                new THREE.BoxGeometry(width * 0.6, podiumH * 0.6, depth + 2.2),
-                new THREE.MeshBasicMaterial({ color: 0xffeedd })
-            );
-            lobbyGlass.position.y = podiumH * 0.35;
-            bldg.add(lobbyGlass);
-
-            // 2. メインのビル躯体（高さに応じてセットバック＝段差構造を入れる）
-            let topY = height;
-            let topW = width;
-            let topD = depth;
-
-            if (height > 55 && Math.random() > 0.3) {
-                // 下段
-                const h1 = height * 0.65;
-                const main1 = new THREE.Mesh(new THREE.BoxGeometry(width, h1, depth), wallMat);
-                main1.position.y = h1 / 2;
-                bldg.add(main1);
-
-                // 上段（セットバックして少し細くなる現代的ビル形状）
-                const h2 = height * 0.35;
-                topW = width * 0.78;
-                topD = depth * 0.78;
-                const main2 = new THREE.Mesh(new THREE.BoxGeometry(topW, h2, topD), wallMat);
-                main2.position.y = h1 + h2 / 2;
-                bldg.add(main2);
-            } else {
-                const main = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), wallMat);
-                main.position.y = height / 2;
-                bldg.add(main);
-            }
-
-            // 麻布台ヒルズ風のクラウン（屋上の光のフレーム装飾）
-            if (isLandmark) {
-                const crown = new THREE.Mesh(
-                    new THREE.BoxGeometry(topW + 0.6, 3, topD + 0.6),
-                    new THREE.MeshBasicMaterial({ color: 0xffddaa })
-                );
-                crown.position.y = topY - 1.5;
-                bldg.add(crown);
-            }
-
-            // 3. 屋上の建築ディテール（パラペット、空調室外機、エレベーター機械室、ヘリポート）
-            // 屋上の縁（パラペット壁）
-            const parapetThickness = 0.8;
-            const parapetH = 1.6;
-            const parapet = new THREE.Mesh(new THREE.BoxGeometry(topW, parapetH, topD), darkConcreteMat);
-            parapet.position.y = topY + parapetH / 2;
-            bldg.add(parapet);
-
-            const roofFloor = new THREE.Mesh(
-                new THREE.BoxGeometry(topW - parapetThickness * 2, 0.5, topD - parapetThickness * 2),
-                new THREE.MeshStandardMaterial({ color: 0x151820, roughness: 0.9 })
-            );
-            roofFloor.position.y = topY + parapetH;
-            bldg.add(roofFloor);
-
-            const roofBaseY = topY + parapetH + 0.25;
-
-            // 高層ビルにはヘリポートまたは大型ペントハウスを設置
-            if (height > 65) {
-                // ヘリポートのサークル（Hマーク風リング）
-                const heliPad = new THREE.Mesh(
-                    new THREE.RingGeometry(topW * 0.22, topW * 0.26, 24),
-                    new THREE.MeshBasicMaterial({ color: 0xddaa00, side: THREE.DoubleSide })
-                );
-                heliPad.rotation.x = -Math.PI / 2;
-                heliPad.position.y = roofBaseY + 0.05;
-                bldg.add(heliPad);
-
-                // 四隅の航空障害灯
-                const bLight = new THREE.Mesh(new THREE.SphereGeometry(0.5, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-                bLight.position.set(topW * 0.45, roofBaseY + 2, topD * 0.45);
-                bldg.add(bLight);
-                blinkingLights.push(bLight);
-            } else {
-                // 中低層ビルにはエレベーター機械室とHVAC（空調室外機ユニット）を配置
-                const mechW = topW * 0.35;
-                const mechD = topD * 0.35;
-                const mechH = 3.5;
-                const mechRoom = new THREE.Mesh(new THREE.BoxGeometry(mechW, mechH, mechD), darkConcreteMat);
-                mechRoom.position.set(topW * 0.15, roofBaseY + mechH / 2, topD * 0.15);
-                bldg.add(mechRoom);
-
-                // 室外機が並ぶディテール
-                for (let u = 0; u < 3; u++) {
-                    const hvac = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.8, 1.5), metalMat);
-                    hvac.position.set(-topW * 0.22, roofBaseY + 0.9, -topD * 0.2 + u * 2.5);
-                    bldg.add(hvac);
+                    // 低層の波打つ緑化商業棟（ガーデンプラザ風）
+                    for (let i = 0; i < 5; i++) {
+                        const pod = new THREE.Mesh(new THREE.BoxGeometry(22, 9 + (i % 2) * 4, 18), new THREE.MeshLambertMaterial({ color: 0x2a3b2c, emissive: 0x221a10 }));
+                        pod.position.set(-130 + i * 14, 5, -55 - i * 12);
+                        g.add(pod);
+                    }
+                    return g;
                 }
-            }
+                cityGroup.add(buildAzabudaiHills());
 
-            return bldg;
-        }
+                // --- D. 愛宕グリーンヒルズ（北側 X=45, Z=-185 特徴的なハスの花冠のようなツインタワー） ---
+                [[35, -182, 96], [68, -192, 86]].forEach(([ax, az, ah], idx) => {
+                    const tex = createArchTexture('office', 10 + idx);
+                    tex.repeat.set(2, 3.5);
+                    const mat = new THREE.MeshLambertMaterial({ map: tex, emissive: 0x777777, emissiveMap: tex });
+                    const body = new THREE.Mesh(new THREE.CylinderGeometry(12, 15, ah, 4), mat);
+                    body.position.set(ax, ah / 2, az);
+                    body.rotation.y = Math.PI / 4;
+                    const lotus = new THREE.Mesh(new THREE.CylinderGeometry(14, 11, 5, 4), new THREE.MeshBasicMaterial({ color: 0xddeeff }));
+                    lotus.position.set(ax, ah + 2.5, az);
+                    lotus.rotation.y = Math.PI / 4;
+                    cityGroup.add(body, lotus);
+                });
 
-        // --- 8. 都市のレイアウト配置（麻布台ヒルズ・プリンスホテル・芝公園周辺をイメージ） ---
-        const cityGroup = new THREE.Group();
+                // --- E. 汎用ディテールビル生成関数（袖看板ネオン・屋上室外機・ヘリポート対応） ---
+                const neonColors = [0xff3355, 0xffcc00, 0x00ccff, 0xff6600, 0xffffff, 0x44ff88];
 
-        // 1. 超高層ランドマーク群（麻布台ヒルズ 森JPタワー等・六本木方面のイメージ）
-        cityGroup.add(createDetailedBuilding(-130, -90, 38, 38, 145, true));
-        cityGroup.add(createDetailedBuilding(-165, -45, 30, 30, 105, true));
-        cityGroup.add(createDetailedBuilding(-95, -130, 28, 28, 95, true));
+                function addCityBlockBuilding(x, z, w, d, h, type, seed, withNeon) {
+                    const b = new THREE.Group();
+                    b.position.set(x, 0, z);
 
-        // 2. 東京プリンスホテル・パークタワーのような横幅のある大型ホテル建築
-        cityGroup.add(createDetailedBuilding(85, -75, 45, 20, 68, true));
-        cityGroup.add(createDetailedBuilding(70, 95, 28, 42, 85, true));
+                    const tex = createArchTexture(type, seed);
+                    tex.repeat.set(Math.max(1, Math.round(w / 14)), Math.max(1, Math.round(h / 26)));
+                    const mat = new THREE.MeshLambertMaterial({ map: tex, emissive: 0x6e6e6e, emissiveMap: tex });
 
-        // 3. 周辺のオフィスビル・マンション群を360度ぐるりと配置
-        const gridRange = 320;
-        const step = 36;
-        for (let x = -gridRange; x <= gridRange; x += step) {
-            for (let z = -gridRange; z <= gridRange; z += step) {
-                const distFromTower = Math.sqrt(x * x + z * z);
+                    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+                    mesh.position.y = h / 2;
+                    b.add(mesh);
 
-                // 東京タワーの敷地（半径48以内）と芝公園の緑地エリアの一部は開けて見通しを良くする
-                if (distFromTower < 52 || distFromTower > 310) continue;
-                // 既に手動配置したランドマーク付近はスキップ
-                if (Math.hypot(x - (-130), z - (-90)) < 45) continue;
-                if (Math.hypot(x - 85, z - (-75)) < 35) continue;
-                if (Math.hypot(x - 70, z - 95) < 35) continue;
+                    // 屋上パラペットと設備
+                    const para = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 1.4, d + 0.5), roofConcrete);
+                    para.position.y = h + 0.7;
+                    b.add(para);
 
-                // 道路の隙間を残しつつランダム性を付与
-                if (Math.random() < 0.22) continue;
+                    if (h > 75) {
+                        // 高層ビルはヘリポート＋赤色灯
+                        const hp = new THREE.Mesh(new THREE.RingGeometry(w * 0.2, w * 0.25, 20), new THREE.MeshBasicMaterial({ color: 0xffcc00, side: THREE.DoubleSide }));
+                        hp.rotation.x = -Math.PI / 2;
+                        hp.position.y = h + 1.5;
+                        b.add(hp);
+                        const rl = new THREE.Mesh(new THREE.SphereGeometry(0.65, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff1111 }));
+                        rl.position.set(w * 0.4, h + 2.5, d * 0.4);
+                        b.add(rl);
+                        blinkingLights.push(rl);
+                    } else {
+                        // 雑居・中層ビルは塔屋と室外機
+                        const ph = new THREE.Mesh(new THREE.BoxGeometry(w * 0.35, 3.5, d * 0.35), roofConcrete);
+                        ph.position.set(w * 0.15, h + 2.2, d * 0.15);
+                        const ac = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.6, 1.8), equipMat);
+                        ac.position.set(-w * 0.2, h + 1.5, 0);
+                        b.add(ph, ac);
+                    }
 
-                const offsetX = (Math.random() - 0.5) * 8;
-                const offsetZ = (Math.random() - 0.5) * 8;
-                const w = 14 + Math.random() * 12;
-                const d = 14 + Math.random() * 12;
-                
-                // タワーのすぐ近くは中低層が多く、少し離れると高層ビルが増えるリアルなスカイライン
-                let h = 18 + Math.random() * 35;
-                if (distFromTower > 110 && Math.random() < 0.3) {
-                    h += 35 + Math.random() * 45;
+                    // 大門・浜松町・新橋方面の飲食店街には「縦長の袖看板ネオン」を付与！
+                    if (withNeon) {
+                        const signCol = neonColors[seed % neonColors.length];
+                        const signH = Math.min(8, h * 0.45);
+                        const sign = new THREE.Mesh(new THREE.BoxGeometry(0.9, signH, 2.2), new THREE.MeshBasicMaterial({ color: signCol }));
+                        sign.position.set(0, h * 0.45, (z < 0 ? d / 2 + 1.1 : -d / 2 - 1.1));
+                        b.add(sign);
+                    }
+
+                    cityGroup.add(b);
                 }
 
-                cityGroup.add(createDetailedBuilding(x + offsetX, z + offsetZ, w, d, h, false));
+                // 1) 大門通りの門前町・飲食店雑居ビル街（X = 178〜265、通りの両側に密集して並ぶリアルな街並み！）
+                let seedIdx = 1;
+                for (let dx = 180; dx <= 262; dx += 15) {
+                    if (Math.abs(dx - 225) < 8) continue; // 大門の柱位置は空ける
+                    const hNorth = 16 + (seedIdx * 7) % 18;
+                    const hSouth = 15 + (seedIdx * 11) % 20;
+                    addCityBlockBuilding(dx, -18, 12, 14, hNorth, 'daimon', seedIdx++, true);
+                    addCityBlockBuilding(dx,  18, 12, 14, hSouth, 'daimon', seedIdx++, true);
+                }
+
+                // 2) 大門・芝大門・浜松町のオフィス＆ホテル街区（X = 180〜375, Z = -280〜+260）
+                for (let x = 185; x <= 375; x += 36) {
+                    for (let z = -280; z <= 260; z += 36) {
+                        if (Math.abs(z) < 28 && x < 285) continue; // 大門通り沿いは上で配置済み
+                        if (Math.abs(x - 275) < 16) continue;      // 第一京浜道路を空ける
+                        if (Math.abs(z - 175) < 16) continue;      // 南側幹線道路を空ける
+                        if (Math.abs(z + 125) < 14) continue;      // 御成門通りを空ける
+
+                        const isHamamatsuchoStation = (x > 295 && Math.abs(z) < 95); // 浜松町駅・貿易センタービル群エリア
+                        let h = isHamamatsuchoStation
+                            ? (85 + (seedIdx * 19) % 65)
+                            : (26 + (seedIdx * 13) % 42);
+                        const w = isHamamatsuchoStation ? 28 : (16 + (seedIdx % 10));
+                        const d = isHamamatsuchoStation ? 28 : (16 + ((seedIdx * 3) % 10));
+                        const hasSign = (!isHamamatsuchoStation && Math.abs(z) < 90 && seedIdx % 2 === 0);
+
+                        addCityBlockBuilding(x, z, w, d, h, hasSign ? 'daimon' : 'office', seedIdx++, hasSign);
+                    }
+                }
+
+                // 3) 北側遠景：虎ノ門ヒルズ・新橋・汐留の超高層スカイライン（Z = -240〜-380）
+                [[-35, -285, 36, 36, 142], [-80, -300, 30, 30, 115], [15, -310, 30, 30, 108],
+                 [195, -320, 34, 28, 125], [240, -335, 32, 32, 135]].forEach(([bx, bz, bw, bd, bh], i) => {
+                    addCityBlockBuilding(bx, bz, bw, bd, bh, 'office', 100 + i, false);
+                });
+
+                // 4) 南側（赤羽橋・三田・芝浦方面 Z = 220〜360）＆ 西側（東麻布・飯倉・六本木方面 X = -85〜-360）
+                for (let x = -350; x <= 145; x += 40) {
+                    for (let z = -260; z <= 340; z += 40) {
+                        // 芝公園・東京タワー・増上寺エリアは絶対に侵食しない！
+                        if (x > -55 && x < 165 && z > -135 && z < 195) continue;
+                        // 麻布台ヒルズ周辺は空ける
+                        if (Math.hypot(x + 155, z + 85) < 78) continue;
+                        // 桜田通りを空ける
+                        if (Math.abs((x + 25) - (z - 175) * 0.29) < 20 && z < 190) continue;
+                        if (Math.abs(z - 175) < 20) continue;
+                        if ((seedIdx * 7) % 10 < 2) continue;
+
+                        // 東麻布の低中層住宅・ビル街と、六本木方面の高層ビルのメリハリをつける
+                        let h = 16 + (seedIdx * 11) % 28;
+                        if (x < -240 && z < 40 && seedIdx % 4 === 0) h += 65; // 六本木ヒルズ・アークヒルズ方面
+                        if (z > 240 && seedIdx % 5 === 0) h += 55;            // 三田住友・田町タワー方面
+                        addCityBlockBuilding(x, z, 16 + (seedIdx % 10), 16 + ((seedIdx * 2) % 10), h, 'office', seedIdx++, false);
+                    }
+                }
+                scene.add(cityGroup);
+
+                // =========================================================
+                // 8. 首都高速都心環状線（カーブする高架橋脚＋オレンジ街灯＋走る車列）
+                // =========================================================
+                const movingCars = [];
+
+                function buildShutokoExpressway() {
+                    const hwGroup = new THREE.Group();
+                    // 芝公園南側から赤羽橋、一の橋（西側）へと大きくカーブする実在ルート
+                    const curve = new THREE.CatmullRomCurve3([
+                        new THREE.Vector3(380, 14, 155),
+                        new THREE.Vector3(180, 14, 195),
+                        new THREE.Vector3(10,  15, 208),
+                        new THREE.Vector3(-95, 16, 175),
+                        new THREE.Vector3(-195,16, 70),
+                        new THREE.Vector3(-245,16, -90),
+                        new THREE.Vector3(-265,16, -320)
+                    ]);
+
+                    // 高架道路デッキと遮音壁
+                    const tubeGeo = new THREE.TubeGeometry(curve, 90, 6.5, 6, false);
+                    tubeGeo.scale(1, 0.22, 1);
+                    const roadDeck = new THREE.Mesh(tubeGeo, new THREE.MeshLambertMaterial({ color: 0x2c3342, emissive: 0x111520 }));
+                    hwGroup.add(roadDeck);
+
+                    // 高架橋脚とオレンジ色のナトリウム道路灯
+                    const pierMat = new THREE.MeshLambertMaterial({ color: 0x3b4252 });
+                    const sodiumMat = new THREE.MeshBasicMaterial({ color: 0xffaa33 });
+                    for (let i = 1; i < 28; i++) {
+                        const pt = curve.getPointAt(i / 28);
+                        const pier = new THREE.Mesh(new THREE.BoxGeometry(3.2, pt.y, 3.2), pierMat);
+                        pier.position.set(pt.x, pt.y / 2, pt.z);
+                        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.75, 6, 6), sodiumMat);
+                        lamp.position.set(pt.x, pt.y + 4.5, pt.z);
+                        hwGroup.add(pier, lamp);
+                    }
+
+                    // 首都高を流れるヘッドライト＆テールランプ
+                    const headMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                    const tailMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
+                    const carGeo  = new THREE.BoxGeometry(1.8, 0.9, 3.6);
+                    for (let i = 0; i < 48; i++) {
+                        const forward = (i % 2 === 0);
+                        const car = new THREE.Mesh(carGeo, forward ? headMat : tailMat);
+                        hwGroup.add(car);
+                        movingCars.push({
+                            type: 'curve', curve, mesh: car,
+                            t: Math.random(),
+                            dir: forward ? 1 : -1,
+                            speed: 0.0012 + Math.random() * 0.0007,
+                            offset: forward ? 2.2 : -2.2
+                        });
+                    }
+
+                    scene.add(hwGroup);
+                }
+                buildShutokoExpressway();
+
+                // 一般幹線道路（桜田通り・日比谷通り・大門通り・第一京浜）の街路灯と走る車
+                function addStreetTrafficAndLamps(x1, z1, x2, z2, count, lampColor) {
+                    const p1 = new THREE.Vector3(x1, 0.7, z1);
+                    const p2 = new THREE.Vector3(x2, 0.7, z2);
+                    const dirVec = p2.clone().sub(p1).normalize();
+                    const rightVec = new THREE.Vector3(-dirVec.z, 0, dirVec.x);
+                    const angle = Math.atan2(dirVec.x, dirVec.z);
+
+                    // 道路沿いの街灯ドット
+                    const lampMat = new THREE.MeshBasicMaterial({ color: lampColor });
+                    const dist = p1.distanceTo(p2);
+                    const steps = Math.floor(dist / 26);
+                    for (let s = 0; s <= steps; s++) {
+                        const pos = p1.clone().lerp(p2, s / steps);
+                        [-7.5, 7.5].forEach(side => {
+                            const l = new THREE.Mesh(new THREE.SphereGeometry(0.55, 5, 5), lampMat);
+                            l.position.copy(pos).addScaledVector(rightVec, side);
+                            l.position.y = 4.5;
+                            scene.add(l);
+                        });
+                    }
+
+                    // 走行車両
+                    const headMat = new THREE.MeshBasicMaterial({ color: 0xffffee });
+                    const tailMat = new THREE.MeshBasicMaterial({ color: 0xff2211 });
+                    const carGeo = new THREE.BoxGeometry(1.6, 0.8, 3.2);
+                    for (let i = 0; i < count; i++) {
+                        const fwd = (i % 2 === 0);
+                        const m = new THREE.Mesh(carGeo, fwd ? headMat : tailMat);
+                        m.rotation.y = angle;
+                        scene.add(m);
+                        movingCars.push({
+                            type: 'line', p1, p2, rightVec, mesh: m,
+                            t: Math.random(),
+                            dir: fwd ? 1 : -1,
+                            speed: (0.28 + Math.random() * 0.22) / dist,
+                            lane: fwd ? 2.8 : -2.8
+                        });
+                    }
+                }
+
+                // 桜田通り（赤羽橋〜神谷町：東京タワーに向かって伸びる象徴的なオレンジの光の道！）
+                addStreetTrafficAndLamps(-25, 175, -145, -380, 28, 0xff9933);
+                // 日比谷通り（増上寺・三解脱門前）
+                addStreetTrafficAndLamps(162, -350, 162, 350, 26, 0xddeeff);
+                // 大門通り（三解脱門〜大門〜浜松町）
+                addStreetTrafficAndLamps(164, 0, 380, 0, 16, 0xffcc77);
+                // 第一京浜（大門交差点）
+                addStreetTrafficAndLamps(275, -350, 275, 350, 24, 0xffddaa);
+
+                // 夜空の星々
+                const starGeo = new THREE.BufferGeometry();
+                const sVerts = [];
+                for (let i = 0; i < 650; i++) {
+                    const r = 800 + Math.random() * 300;
+                    const th = Math.random() * Math.PI * 2;
+                    const ph = Math.random() * Math.PI * 0.46;
+                    sVerts.push(r * Math.sin(ph) * Math.cos(th), r * Math.cos(ph), r * Math.sin(ph) * Math.sin(th));
+                }
+                starGeo.setAttribute('position', new THREE.Float32BufferAttribute(sVerts, 3));
+                scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xbcd8ff, size: 2.0 })));
+
+                // =========================================================
+                // 9. 名所案内3Dラベル（ボタンでいつでもON/OFF可能）
+                // =========================================================
+                const labelGroup = new THREE.Group();
+
+                function addLandmarkLabel(text, x, y, z, borderCol) {
+                    const c = document.createElement('canvas');
+                    c.width = 320; c.height = 68;
+                    const ctx = c.getContext('2d');
+                    ctx.fillStyle = 'rgba(8, 14, 28, 0.82)';
+                    ctx.strokeStyle = borderCol || '#ff8833';
+                    ctx.lineWidth = 4;
+                    ctx.fillRect(6, 6, 308, 56);
+                    ctx.strokeRect(6, 6, 308, 56);
+
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 23px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(text, 160, 35);
+
+                    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+                        map: new THREE.CanvasTexture(c), transparent: true, depthTest: false
+                    }));
+                    sp.position.set(x, y, z);
+                    sp.scale.set(34, 7.2, 1);
+                    labelGroup.add(sp);
+                }
+
+                addLandmarkLabel('東京タワー', 0, 166, 0, '#ff5500');
+                addLandmarkLabel('増上寺 大殿', 96, 31, 0, '#ffbb55');
+                addLandmarkLabel('三解脱門', 148, 24, 0, '#ee4422');
+                addLandmarkLabel('大門・大門通り街並み', 225, 24, 0, '#ff4433');
+                addLandmarkLabel('芝公園（円形芝生広場）', 112, 16, 88, '#44cc77');
+                addLandmarkLabel('ザ・プリンス パークタワー東京', 48, 88, 122, '#ffe099');
+                addLandmarkLabel('東京プリンスホテル', 72, 42, -88, '#ffd288');
+                addLandmarkLabel('麻布台ヒルズ', -155, 170, -85, '#ffcc77');
+                addLandmarkLabel('愛宕グリーンヒルズ', 50, 112, -187, '#99ccff');
+                addLandmarkLabel('赤羽橋交差点・桜田通り', -25, 22, 175, '#ff9933');
+                addLandmarkLabel('首都高速都心環状線', 20, 29, 208, '#66aaff');
+                addLandmarkLabel('浜松町・竹芝方面', 325, 138, 0, '#88bbff');
+                scene.add(labelGroup);
+
+                statusEl.textContent = '港区・東京タワー周辺のリアル地理モデル描画完了！視点ボタンをお試しください。';
+
+                // =========================================================
+                // 10. カメラプリセット視点切り替え ＆ 録画機能
+                // =========================================================
+                document.getElementById('viewOrbit').addEventListener('click', () => {
+                    cam.goalTarget.set(10, 42, 0);
+                    cam.goalRadius = 265;
+                    cam.goalPhi = 1.18;
+                    cam.autoRotate = true;
+                    document.getElementById('toggleRotBtn').textContent = '自動回転: ON';
+                });
+
+                // 定番絶景1：大門・増上寺側から三解脱門と大殿越しに見上げる東京タワー！
+                document.getElementById('viewZojoji').addEventListener('click', () => {
+                    cam.autoRotate = false;
+                    document.getElementById('toggleRotBtn').textContent = '自動回転: OFF';
+                    cam.goalTarget.set(55, 42, 0);
+                    cam.goalTheta = 0.03; // 東(+X:大門側)から西(東京タワー)を真っ直ぐ見る
+                    cam.goalPhi = 1.38;
+                    cam.goalRadius = 205;
+                });
+
+                // 定番絶景2：赤羽橋交差点・桜田通りから見上げる東京タワーと麻布台ヒルズ！
+                document.getElementById('viewAkabane').addEventListener('click', () => {
+                    cam.autoRotate = false;
+                    document.getElementById('toggleRotBtn').textContent = '自動回転: OFF';
+                    cam.goalTarget.set(-15, 52, 10);
+                    cam.goalTheta = 1.62; // 南(+Z:赤羽橋側)から見上げる
+                    cam.goalPhi = 1.36;
+                    cam.goalRadius = 215;
+                });
+
+                // 定番絶景3：芝公園の森・プリンスパークタワー越しに見る東京タワー！
+                document.getElementById('viewShiba').addEventListener('click', () => {
+                    cam.autoRotate = false;
+                    document.getElementById('toggleRotBtn').textContent = '自動回転: OFF';
+                    cam.goalTarget.set(42, 36, 35);
+                    cam.goalTheta = 0.82; // 南東(芝公園側)から見渡す
+                    cam.goalPhi = 1.30;
+                    cam.goalRadius = 175;
+                });
+
+                const toggleRotBtn = document.getElementById('toggleRotBtn');
+                toggleRotBtn.addEventListener('click', () => {
+                    cam.autoRotate = !cam.autoRotate;
+                    toggleRotBtn.textContent = `自動回転: ${cam.autoRotate ? 'ON' : 'OFF'}`;
+                });
+
+                const toggleLabelBtn = document.getElementById('toggleLabelBtn');
+                toggleLabelBtn.addEventListener('click', () => {
+                    labelGroup.visible = !labelGroup.visible;
+                    toggleLabelBtn.textContent = `名所ラベル: ${labelGroup.visible ? 'ON' : 'OFF'}`;
+                });
+
+                // 360度動画のWebM録画書き出し（18秒でゆったり1周）
+                const recordBtn = document.getElementById('recordBtn');
+                let isRecording = false;
+                recordBtn.addEventListener('click', () => {
+                    if (isRecording) return;
+                    isRecording = true;
+                    cam.autoRotate = true;
+                    toggleRotBtn.textContent = '自動回転: ON';
+                    const prevSpeed = cam.rotSpeed;
+                    cam.rotSpeed = (Math.PI * 2) / (18 * 60);
+
+                    recordBtn.classList.add('recording');
+                    recordBtn.textContent = '🔴 録画中... (残り18秒)';
+
+                    const stream = renderer.domElement.captureStream(60);
+                    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+                        ? 'video/webm;codecs=vp9'
+                        : 'video/webm';
+                    const recorder = new MediaRecorder(stream, { mimeType });
+                    const chunks = [];
+
+                    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                    recorder.onstop = () => {
+                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'tokyo_tower_shibapark_zojoji_360.webm';
+                        a.click();
+                        URL.revokeObjectURL(url);
+
+                        isRecording = false;
+                        cam.rotSpeed = prevSpeed;
+                        recordBtn.classList.remove('recording');
+                        recordBtn.textContent = '🎥 360度動画を録画 (18秒)';
+                    };
+
+                    recorder.start();
+                    let sec = 18;
+                    const timer = setInterval(() => {
+                        sec--;
+                        if (sec > 0) {
+                            recordBtn.textContent = `🔴 録画中... (残り${sec}秒)`;
+                        } else {
+                            clearInterval(timer);
+                            recorder.stop();
+                        }
+                    }, 1000);
+                });
+
+                // =========================================================
+                // 11. アニメーションループ
+                // =========================================================
+                let tick = 0;
+                const upVec = new THREE.Vector3(0, 1, 0);
+
+                function animate() {
+                    requestAnimationFrame(animate);
+                    tick++;
+
+                    // 航空障害灯の点滅
+                    const blink = Math.sin(tick * 0.08) > 0 ? 1.25 : 0.6;
+                    for (let i = 0; i < blinkingLights.length; i++) {
+                        blinkingLights[i].scale.set(blink, blink, blink);
+                    }
+
+                    // 首都高＆幹線道路の車列アニメーション
+                    for (let i = 0; i < movingCars.length; i++) {
+                        const c = movingCars[i];
+                        c.t += c.dir * c.speed;
+                        if (c.t > 1) c.t -= 1;
+                        if (c.t < 0) c.t += 1;
+
+                        if (c.type === 'curve') {
+                            const pt = c.curve.getPointAt(c.t);
+                            const tan = c.curve.getTangentAt(c.t);
+                            const side = new THREE.Vector3().crossVectors(tan, upVec).normalize();
+                            c.mesh.position.copy(pt).addScaledVector(side, c.offset);
+                            c.mesh.position.y += 1.6;
+                            c.mesh.lookAt(pt.clone().add(tan).addScaledVector(side, c.offset));
+                        } else {
+                            c.mesh.position.lerpVectors(c.p1, c.p2, c.t).addScaledVector(c.rightVec, c.lane);
+                        }
+                    }
+
+                    cam.update();
+                    renderer.render(scene, camera);
+                }
+
+                window.addEventListener('resize', () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
+                animate();
+
+            } catch (err) {
+                statusEl.style.color = '#ff6666';
+                statusEl.textContent = 'エラー: ' + err.message;
             }
-        }
-        scene.add(cityGroup);
-
-        // 地面（道路網と車のライト）
-        const ground = new THREE.Mesh(
-            new THREE.PlaneGeometry(1200, 1200),
-            new THREE.MeshStandardMaterial({
-                map: createGroundTexture(),
-                emissive: 0xffffff,
-                emissiveMap: createGroundTexture(),
-                emissiveIntensity: 0.7,
-                roughness: 0.9
-            })
-        );
-        ground.rotation.x = -Math.PI / 2;
-        scene.add(ground);
-
-        // 夜空の星（背景の奥行き）
-        const starGeo = new THREE.BufferGeometry();
-        const starPos = [];
-        for (let i = 0; i < 800; i++) {
-            const r = 600 + Math.random() * 300;
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.random() * Math.PI * 0.45;
-            starPos.push(r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
-        }
-        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
-        const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xaaccff, size: 1.5 }));
-        scene.add(stars);
-
-        // --- 9. UIボタン操作（自動回転切り替え ＆ 動画ファイル録画書き出し） ---
-        const toggleRotBtn = document.getElementById('toggleRotBtn');
-        toggleRotBtn.addEventListener('click', () => {
-            controls.autoRotate = !controls.autoRotate;
-            toggleRotBtn.textContent = `自動回転: ${controls.autoRotate ? 'ON' : 'OFF'}`;
         });
-
-        // ブラウザ標準のMediaRecorder APIを使ってキャンバスを直接動画ファイル化
-        const recordBtn = document.getElementById('recordBtn');
-        let isRecording = false;
-
-        recordBtn.addEventListener('click', () => {
-            if (isRecording) return;
-            isRecording = true;
-            controls.autoRotate = true;
-            controls.autoRotateSpeed = 4.0; // 約15秒でちょうど360度1周する速度に設定
-            toggleRotBtn.textContent = '自動回転: ON';
-
-            recordBtn.classList.add('recording');
-            recordBtn.textContent = '🔴 360度録画中... (残り15秒)';
-
-            const stream = renderer.domElement.captureStream(60); // 60fps動画
-            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
-            const chunks = [];
-
-            recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-            recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'tokyo_tower_360_night.webm';
-                a.click();
-                URL.revokeObjectURL(url);
-
-                isRecording = false;
-                controls.autoRotateSpeed = 1.6;
-                recordBtn.classList.remove('recording');
-                recordBtn.textContent = '🎥 360度動画を録画 (約15秒)';
-            };
-
-            recorder.start();
-
-            let sec = 15;
-            const timer = setInterval(() => {
-                sec--;
-                if (sec > 0) {
-                    recordBtn.textContent = `🔴 360度録画中... (残り${sec}秒)`;
-                } else {
-                    clearInterval(timer);
-                    recorder.stop();
-                }
-            }, 1000);
-        });
-
-        // --- 10. アニメーションループ ---
-        const clock = new THREE.Clock();
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const elapsed = clock.getElapsedTime();
-
-            // 航空障害灯（赤いライト）のリアルな点滅アニメーション
-            const blinkIntensity = (Math.sin(elapsed * 4.5) > 0.2) ? 1.0 : 0.15;
-            blinkingLights.forEach(light => {
-                light.scale.setScalar(blinkIntensity === 1.0 ? 1.2 : 0.7);
-            });
-
-            controls.update();
-            composer.render();
-        }
-
-        // ウィンドウリサイズ対応
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            composer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        animate();
     </script>
 </body>
 </html>
