@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>夜の東京タワー周辺 3D・360度ビュー</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #03050a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { display: block; }
+        #ui {
+            position: absolute; top: 20px; left: 20px; color: #fff;
+            background: rgba(10, 15, 30, 0.75); padding: 15px 20px; border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        h1 { margin: 0 0 8px 0; font-size: 18px; color: #ff6622; letter-spacing: 1px; }
+        p { margin: 4px 0; font-size: 13px; color: #ccc; }
+        .controls { margin-top: 12px; display: flex; gap: 10px; }
+        button {
+            padding: 8px 14px; font-size: 13px; cursor: pointer;
+            background: #ff5500; color: white; border: none; border-radius: 5px;
+            font-weight: bold; transition: 0.2s;
+        }
+        button:hover { background: #ff7733; }
+        button.recording { background: #dd0000; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+    </style>
+    <!-- Three.js と拡張機能をCDNから読み込み -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="ui">
+        <h1>TOKYO TOWER 360° NIGHT VIEW</h1>
+        <p>🖱️ 左ドラッグ: 視点回転 / 右ドラッグ: 移動 / ホイール: ズーム</p>
+        <div class="controls">
+            <button id="toggleRotBtn">自動回転: ON</button>
+            <button id="recordBtn">🎥 360度動画を録画 (約15秒)</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        // --- 1. シーン・カメラ・レンダラーの初期設定 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x040711);
+        scene.fog = new THREE.FogExp2(0x040711, 0.0018);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
+        camera.position.set(180, 110, 180);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
+        document.body.appendChild(renderer.domElement);
+
+        // --- 2. ポストプロセス（夜景の光のにじみ・ブルーム効果） ---
+        const renderScene = new RenderPass(scene, camera);
+        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+        bloomPass.threshold = 0.25;
+        bloomPass.strength = 1.0; // 光の強さ
+        bloomPass.radius = 0.6;
+
+        const composer = new EffectComposer(renderer);
+        composer.addPass(renderScene);
+        composer.addPass(bloomPass);
+
+        // --- 3. カメラコントロール（360度回転） ---
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 55, 0); // 東京タワーの中心あたりを注視
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 1.6; // 自動回転の速度
+        controls.maxPolarAngle = Math.PI / 2 - 0.02; // 地面より下に潜らないように制限
+
+        // --- 4. ライティング（建物のディテールを見せるための照明） ---
+        const ambientLight = new THREE.AmbientLight(0x223355, 1.8); // 夜空の環境光（建物の輪郭を見せる）
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0x5577aa, 1.5); // 月明かりのような指向性ライト
+        dirLight.position.set(150, 300, 100);
+        scene.add(dirLight);
+
+        const towerGlow = new THREE.PointLight(0xff5500, 5, 250); // 東京タワーからの照り返し
+        towerGlow.position.set(0, 60, 0);
+        scene.add(towerGlow);
+
+        // --- 5. プロシージャルテクスチャ生成（コードだけで窓や鉄骨を描く） ---
+        
+        // ビルの窓と外壁のディテールテクスチャ
+        function createBuildingTexture(seed) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            // 外壁ベースカラー（コンクリートの質感・パネルの目地）
+            const wallColors = ['#151a24', '#1e2430', '#12151c', '#22262e'];
+            ctx.fillStyle = wallColors[seed % wallColors.length];
+            ctx.fillRect(0, 0, 256, 512);
+
+            // 外壁の縦ピラー・横フレームを描画（建物の構造ディテール）
+            ctx.fillStyle = '#0c0f14';
+            for (let y = 0; y < 512; y += 16) ctx.fillRect(0, y, 256, 3);
+            for (let x = 0; x < 256; x += 32) ctx.fillRect(x, 0, 4, 512);
+
+            // 窓の明かりを描画（オフィス光、暖色光、消灯）
+            const cols = 8;
+            const rows = 32;
+            const padX = 6, padY = 4;
+            const winW = (256 / cols) - padX * 1.5;
+            const winH = (512 / rows) - padY * 1.5;
+
+            for (let r = 1; r < rows - 1; r++) {
+                // フロアごとの点灯率を変える（リアルさ向上）
+                const floorLitProb = (Math.sin(r * seed) * 0.5 + 0.5) * 0.75;
+                for (let c = 0; c < cols; c++) {
+                    const wx = c * (256 / cols) + padX;
+                    const wy = r * (512 / rows) + padY;
+
+                    if (Math.random() < floorLitProb) {
+                        const randColor = Math.random();
+                        if (randColor < 0.55) ctx.fillStyle = '#cceeff';      // クールな蛍光灯・LED
+                        else if (randColor < 0.85) ctx.fillStyle = '#ffe4aa'; // 暖色系オフィス・ホテル
+                        else if (randColor < 0.95) ctx.fillStyle = '#88bbff'; // 青白いモニター光
+                        else ctx.fillStyle = '#ffaa66';                       // オレンジの室内灯
+                        
+                        ctx.fillRect(wx, wy, winW, winH);
+                        
+                        // ブラインドや部屋の仕切りのディテールをランダムに追加
+                        if (Math.random() < 0.4) {
+                            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                            ctx.fillRect(wx, wy, winW, winH * 0.5);
+                        }
+                    } else {
+                        // 消灯している窓（夜空の反射）
+                        ctx.fillStyle = '#090d16';
+                        ctx.fillRect(wx, wy, winW, winH);
+                    }
+                }
+            }
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            return tex;
+        }
+
+        // 東京タワーの鉄骨トラス（網目）透過テクスチャ
+        function createTrussTexture(colorHex) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, 256, 256);
+
+            ctx.strokeStyle = colorHex;
+            ctx.lineWidth = 14;
+
+            // 外枠とX字のブレース（筋交い）
+            ctx.strokeRect(0, 0, 256, 256);
+            c
